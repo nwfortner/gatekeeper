@@ -72,21 +72,18 @@ describe('Brakes Class', () => {
     }
   });
   it('Should be an instance of EventEmitter', () => {
-    brake = new Brakes(noop);
+    brake = new Brakes({ func: noop });
     expect(brake).to.be.instanceof(EventEmitter);
   });
   it('Should be instantiated with default options', () => {
-    brake = new Brakes(noop);
-    // const snapshotSpy = sinon.spy(brake._stats, 'startSnapshots');
-    // const statsSpy = sinon.spy(brake, '_startStatsCheck');
-    // expect(snapshotSpy.calledOnce).to.equal(true);
-    // expect(statsSpy.calledOnce).to.equal(true);
-    // expect(brake._stats).to.be.instanceof(Stats);
+    brake = new Brakes({ func: noop });
     expect(brake._opts).to.deep.equal(defaultOptions);
   });
   it('Should accept no function with opts', () => {
     brake = new Brakes({
-      name: 'foo'
+      opts: {
+        name: 'foo'
+      }
     });
     expect(brake._masterCircuit).to.equal(undefined);
     expect(brake._opts.name).to.equal('foo');
@@ -101,13 +98,13 @@ describe('Brakes Class', () => {
     });
   });
   it('Should promisify the service func', () => {
-    brake = new Brakes(noop);
+    brake = new Brakes({ func: noop });
     return brake.exec('test').then(result => {
       expect(result).to.equal('test');
     });
   });
   it('Should promisify and reject service func', () => {
-    brake = new Brakes(noop);
+    brake = new Brakes({ func: noop });
     return brake.exec(null, 'err').then(null, err => {
       expect(err).to.be.instanceof(Error);
       expect(err.message).to.equal('[Breaker: defaultBrake] err');
@@ -115,13 +112,13 @@ describe('Brakes Class', () => {
   });
 
   it('Should accept a promise', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
     return brake.exec('test').then(result => {
       expect(result).to.equal('test');
     });
   });
   it('Should reject a promise', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
     return brake.exec(null, 'err').then(null, err => {
       expect(err).to.be.instanceof(Error);
       expect(err.message).to.equal('[Breaker: defaultBrake] err');
@@ -137,14 +134,14 @@ describe('Brakes Class', () => {
     const overrides = {
       name: 'allYourNameAreBelongToUs'
     };
-    brake = new Brakes(noop, overrides);
+    brake = new Brakes({ func: noop, opts: overrides });
     expect(brake.name).to.deep.equal(overrides.name);
   });
   it('Should be instantiated with a group', () => {
     const overrides = {
       group: 'allYourGroupAreBelongToUs'
     };
-    brake = new Brakes(noop, overrides);
+    brake = new Brakes({ func: noop, opts: overrides });
     expect(brake.group).to.deep.equal(overrides.group);
   });
   it('Should be instantiated with override options', () => {
@@ -165,11 +162,11 @@ describe('Brakes Class', () => {
       isFunction: false,
       isPromise: false
     };
-    brake = new Brakes(noop, overrides);
+    brake = new Brakes({ func: noop, opts: overrides });
     expect(brake._opts).to.deep.equal(overrides);
   });
   it('Should Resolve a service call and trigger event', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
     const spy = sinon.spy(() => {});
     brake.on('success', spy);
     return brake.exec('foo').then(result => {
@@ -178,7 +175,7 @@ describe('Brakes Class', () => {
     });
   });
   it('Should Reject a service call and trigger event', () => {
-    brake = new Brakes(noop);
+    brake = new Brakes({ func: noop });
     const spy = sinon.spy(() => {});
     brake.on('failure', spy);
     return brake.exec(null, 'err').then(null, err => {
@@ -188,8 +185,11 @@ describe('Brakes Class', () => {
     });
   });
   it('Should timeout a service call and trigger event', () => {
-    brake = new Brakes(slowpr, {
-      timeout: 1
+    brake = new Brakes({
+      func: slowpr,
+      opts: {
+        timeout: 1
+      }
     });
     const spy = sinon.spy(() => {});
     brake.on('timeout', spy);
@@ -199,14 +199,14 @@ describe('Brakes Class', () => {
     });
   });
   it('Should auto reject if circuit is broken', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
     brake._circuitOpen = true;
     return brake.exec(null, 'err').then(null, err => {
       expect(err).to.be.instanceof(CircuitBrokenError);
     });
   });
   it('Should call fallback if circuit is broken', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
     brake.fallback(fbpr);
     brake._circuitOpen = true;
     return brake.exec('test').then(result => {
@@ -214,7 +214,7 @@ describe('Brakes Class', () => {
     });
   });
   it('Fallback should cascade fail', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
     brake.fallback(noop);
     return brake.exec(null, 'err').then(null, err => {
       expect(err).to.be.instanceof(Error);
@@ -222,31 +222,40 @@ describe('Brakes Class', () => {
     });
   });
   it('Fallback should succeed', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
     brake.fallback(fbpr);
     return brake.exec(null, 'thisShouldFailFirstCall').then(result => {
       expect(result).to.equal('thisShouldFailFirstCall');
     });
   });
   it('Should accept health check & fallback function from options', () => {
-    brake = new Brakes(nopr, {
-      healthCheck: hc,
-      fallback: fbpr
+    brake = new Brakes({
+      func: nopr,
+      opts: {
+        healthCheck: hc,
+        fallback: fbpr
+      },
     });
     expect(brake._healthCheck).to.equal(hc);
     expect(brake._masterCircuit._fallback).to.equal(fbpr);
   });
   it('Should accept a health check function that is async', () => {
-    brake = new Brakes(nopr, {
-      healthCheck: noop
+    brake = new Brakes({
+      func: nopr,
+      opts: {
+        healthCheck: noop,
+      },
     });
     expect(brake._healthCheck('foo').then).to.not.equal(undefined);
   });
   it('_setHealthInterval should close', done => {
     const clock = sinon.useFakeTimers();
-    brake = new Brakes(nopr, {
-      healthCheck: hc,
-      healthCheckInterval: 15
+    brake = new Brakes({
+      func: nopr,
+      opts: {
+        healthCheck: hc,
+        healthCheckInterval: 15
+      }
     });
     const statsResetSpy = sinon.spy(brake._stats, 'reset');
     const closeSpy = sinon.spy(brake, '_close');
@@ -265,9 +274,12 @@ describe('Brakes Class', () => {
     clock.restore();
   });
   it('_setHealthInterval should emit error', done => {
-    brake = new Brakes(nopr, {
-      healthCheck: nopr.bind(null, null, 'thisisanerror'),
-      healthCheckInterval: 5
+    brake = new Brakes({
+      func: nopr,
+      opts: {
+        healthCheck: nopr.bind(null, null, 'thisisanerror'),
+        healthCheckInterval: 5
+      }
     });
 
     const eventSpy = sinon.spy(() => {});
@@ -284,18 +296,24 @@ describe('Brakes Class', () => {
     });
   });
   it('_setHealthInterval should do nothing if interval is already set', () => {
-    brake = new Brakes(nopr, {
-      healthCheck: nopr.bind(null, null, 'thisisanerror'),
-      healthCheckInterval: 0
+    brake = new Brakes({
+      func: nopr,
+      opts: {
+        healthCheck: nopr.bind(null, null, 'thisisanerror'),
+        healthCheckInterval: 5
+      }
     });
     brake._healthInterval = 'foo';
     brake._setHealthInterval();
     expect(brake._healthInterval).to.equal('foo');
   });
   it('_setHealthInterval should clearInterval, if circuit is opened', done => {
-    brake = new Brakes(nopr, {
-      healthCheck: hc,
-      healthCheckInterval: 0
+    brake = new Brakes({
+      func: nopr,
+      opts: {
+        healthCheck: hc,
+        healthCheckInterval: 0,
+      }
     });
     brake._circuitOpen = false;
     brake._setHealthInterval();
@@ -306,8 +324,11 @@ describe('Brakes Class', () => {
   });
   it('_open should open', () => {
     const clock = sinon.useFakeTimers();
-    brake = new Brakes(nopr, {
-      circuitDuration: 5
+    brake = new Brakes({
+      func: nopr,
+      opts: {
+        circuitDuration: 5
+      }
     });
 
     const statsResetSpy = sinon.spy(brake._stats, 'reset');
@@ -334,9 +355,12 @@ describe('Brakes Class', () => {
     clock.restore();
   });
   it('_open should start healthCheckInterval', () => {
-    brake = new Brakes(nopr, {
-      circuitDuration: 5,
-      healthCheck: hc
+    brake = new Brakes({
+      func: nopr,
+      opts: {
+        circuitDuration: 5,
+        healthCheck: hc
+      }
     });
 
     const hcSpy = sinon.spy(brake, '_setHealthInterval');
@@ -349,7 +373,7 @@ describe('Brakes Class', () => {
     expect(hcSpy.calledOnce).to.equal(true);
   });
   it('_close should close', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
     brake._circuitOpened = true;
     const eventSpy = sinon.spy(() => {});
     brake.on('circuitClosed', eventSpy);
@@ -358,10 +382,13 @@ describe('Brakes Class', () => {
     expect(eventSpy.calledOnce).to.equal(true);
   });
   it('_snapshotHandler should transform stats object and emit', done => {
-    brake = new Brakes(nopr, {
-      name: 'brake1',
-      group: 'brakeGroup1',
-      registerGlobal: false
+    brake = new Brakes({
+      func: nopr,
+      opts: {
+        name: 'brake1',
+        group: 'brakeGroup1',
+        registerGlobal: false
+      }
     });
     const eventSpy = sinon.spy(() => {});
     brake.on('snapshot', eventSpy);
@@ -383,7 +410,7 @@ describe('Brakes Class', () => {
     }, 5);
   });
   it('destroy() should remove all references', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
 
     // first test that we are handling all appropriate events
     const expectedEvents = ['success', 'timeout', 'failure', 'snapshot'];
@@ -400,12 +427,12 @@ describe('Brakes Class', () => {
     globalStats.deregister.restore();
   });
   it('getGlobalStats should return instance of globalStats', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
     expect(brake.getGlobalStats()).to.equal(globalStats);
     expect(Brakes.getGlobalStats()).to.equal(globalStats);
   });
   it('_failureHandler should not register a stats failure if generations do not match', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
     sinon.stub(brake._stats, 'failure');
     brake._circuitGeneration = 20;
     brake._failureHandler(100, 19);
@@ -413,7 +440,7 @@ describe('Brakes Class', () => {
     brake._stats.failure.restore();
   });
   it('_timeoutHandler should not register a stats timeout if generations do not match', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
     sinon.stub(brake._stats, 'timeout');
     brake._circuitGeneration = 20;
     brake._timeoutHandler(100, 19);
@@ -421,7 +448,7 @@ describe('Brakes Class', () => {
     brake._stats.timeout.restore();
   });
   it('_checkStats should not check when threshold isn\'t met', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
     const spy = sinon.spy(brake, '_close');
     brake._checkStats({
       total: 50
@@ -429,7 +456,7 @@ describe('Brakes Class', () => {
     expect(spy.calledOnce).to.equal(false);
   });
   it('_checkStats should not check when total is 0', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
     brake._checkingStatus = true;
     const spy = sinon.spy(brake, '_open');
     brake._checkStats({
@@ -438,7 +465,7 @@ describe('Brakes Class', () => {
     expect(spy.calledOnce).to.equal(false);
   });
   it('_checkStats should not check when circuit is broken is 0', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
     brake._checkingStatus = true;
     brake._closed = true;
     const spy = sinon.spy(brake, '_open');
@@ -448,7 +475,7 @@ describe('Brakes Class', () => {
     expect(spy.calledOnce).to.equal(false);
   });
   it('isOpen should return whether or not circuit is open', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
     brake._circuitOpen = true;
     expect(brake.isOpen()).to.equal(true);
     brake._circuitOpen = false;
@@ -464,7 +491,7 @@ describe('Brakes Class', () => {
     expect(spy.calledOnce).to.equal(false);
   });
   it('_checkStats should check and close', () => {
-    brake = new Brakes(nopr);
+    brake = new Brakes({ func: nopr });
     brake._checkingStatus = true;
     const spy = sinon.spy(brake, '_open');
     brake._checkStats({
@@ -474,7 +501,7 @@ describe('Brakes Class', () => {
     expect(spy.calledOnce).to.equal(true);
   });
   it('Should be able to create Slave Circuit', () => {
-    brake = new Brakes(noop);
+    brake = new Brakes({ func: noop });
     const circuit = brake.slaveCircuit(noop);
     expect(circuit).to.be.instanceof(Circuit);
   });
